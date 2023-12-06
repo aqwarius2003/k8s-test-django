@@ -33,10 +33,10 @@
     "applications":{
        "app": {
             "type":"python 3.9",
-            "path":"/code/",
-            "module":"project.wsgi",
+            "path":"/webapp/src/",
+            "module":"webapp.wsgi",
             "environment": {
-                "DJANGO_SETTINGS_MODULE": "project.settings",
+                "DJANGO_SETTINGS_MODULE": "webapp.settings",
             }
         }
     }
