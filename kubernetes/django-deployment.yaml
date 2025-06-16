@@ -1,0 +1,47 @@
+    # kubernetes/django-deployment.yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: django-app
+      labels:
+        app: django-app
+        app.kubernetes.io/name: django-app
+        app.kubernetes.io/instance: django-instance
+        app.kubernetes.io/version: "1.0.0"
+        app.kubernetes.io/component: backend
+        app.kubernetes.io/part-of: django-project
+        app.kubernetes.io/managed-by: kubectl
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: django-app
+      template:
+        metadata:
+          labels:
+            app: django-app
+        spec:
+          containers:
+          - name: django-app
+            image: django_app:latest
+            imagePullPolicy: Never
+            ports:
+            - containerPort: 80
+            env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: django-secret
+                  key: DATABASE_URL
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: django-secret
+                  key: SECRET_KEY
+            - name: ALLOWED_HOSTS
+              valueFrom:
+                secretKeyRef:
+                  name: django-secret
+                  key: ALLOWED_HOSTS
+            - name: DEBUG
+              value: "True"

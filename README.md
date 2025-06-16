@@ -75,3 +75,128 @@ $ docker compose build web
 `ALLOWED_HOSTS` -- настройка Django со списком разрешённых адресов. Если запрос прилетит на другой адрес, то сайт ответит ошибкой 400. Можно перечислить несколько адресов через запятую, например `127.0.0.1,192.168.0.1,site.test`. [Документация Django](https://docs.djangoproject.com/en/3.2/ref/settings/#allowed-hosts).
 
 `DATABASE_URL` -- адрес для подключения к базе данных PostgreSQL. Другие СУБД сайт не поддерживает. [Формат записи](https://github.com/jacobian/dj-database-url#url-schema).
+
+
+## Развертывание сайта в Minikube
+
+Для запуска проекта в Minikube вам потребуется установленный Minikube и `kubectl`. Инструкции по установке можно найти на официальных сайтах:
+
+- [Install Minikube](https://minikube.sigs.k8s.io/docs/start/)
+- [Install kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/)
+
+Манифесты Kubernetes для развертывания Django-приложения находятся в директории `kubernetes/`.
+
+### 1. Запуск Minikube и настройка окружения Docker
+
+Убедитесь, что Minikube запущен, и настройте вашу оболочку для использования демона Docker Minikube:
+
+```shell
+$ minikube start
+$ eval $(minikube docker-env)
+```
+
+### 2. Сборка Docker образа
+
+Соберите Docker образ Django-приложения. Убедитесь, что вы находитесь в корневом каталоге проекта, где находится `Dockerfile`:
+
+```shell
+$ docker build -t django_app:latest .
+```
+
+Поскольку мы используем `imagePullPolicy: Never` в наших манифестах Kubernetes, образ должен быть доступен в кэше Minikube. После сборки образ автоматически будет доступен.
+
+### 3. Развертывание PostgreSQL вне кластера
+
+Для развертывания PostgreSQL вне кластера используется файл `docker-compose.yml`.
+PostgreSQL будет работать на хост-машине. **Для этого Docker должен быть установлен на хост-машине.** Альтернативно, база данных может быть поднята на любом другом компьютере, главное, чтобы кластер Minikube мог достучаться до ее внешнего IP-адреса.
+
+Убедитесь, что ваш `docker-compose.yml` настроен для привязки порта PostgreSQL к IP-адресу вашей хост-машины (например, `192.168.1.33:5432:5432`).
+Отредактируйте `docker-compose.yml` под свои параметры. Например, замените 192.168.1.33 на ваш реальный внешний IP-адрес
+
+Запустите PostgreSQL с помощью Docker Compose:
+
+```shell
+$ docker compose up -d postgres
+```
+
+### 4. Создание секретов Kubernetes
+
+Для безопасного хранения чувствительных данных, таких как `SECRET_KEY` и `DATABASE_URL`, мы будем использовать секреты Kubernetes.
+
+Создайте файл `kubernetes/django-secret.yaml` со следующим содержимым. **Важно:** значения для `DB_USER`, `DB_PASSWORD` и других чувствительных данных должны быть закодированы в Base64.
+
+Вы можете закодировать строку в Base64, используя команду `echo -n "ВАША_СТРОКА" | base64`. Например, для пароля `my_secret_password` команда будет `echo -n "my_secret_password" | base64`, что даст `bXlfc2VjcmV0X3Bhc3N3b3Jk`.
+
+Пример содержимого `kubernetes/django-secret.yaml`:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: django-secret
+type: Opaque
+data:
+  DATABASE_URL <закодированный_DATABASE_URL>
+  SECRET_KEY: <закодированный_SECRET_KEY>
+  ALLOWED_HOSTS: <закодированный_ALLOWED_HOSTS>
+```
+
+Замените `<закодированное_имя_пользователя_БД>`, `<закодированный_пароль_БД>`, `<закодированный_SECRET_KEY>` и `<закодированный_ALLOWED_HOSTS>` на ваши фактические закодированные значения.
+
+Затем примените этот секрет в вашем кластере Kubernetes:
+
+```shell
+$ kubectl apply -f kubernetes/django-secret.yaml
+```
+
+Убедитесь, что секрет создан:
+
+```shell
+$ kubectl get secret django-secret -o yaml
+```
+
+**Важно:** Если вы изменили значения в файле `kubernetes/django-secret.yaml` и повторно применили его (`kubectl apply -f kubernetes/django-secret.yaml`), уже запущенные поды вашего приложения не подхватят эти изменения автоматически. Для того чтобы поды начали использовать новые значения секрета, необходимо выполнить rolling restart развертывания:
+
+```shell
+$ kubectl rollout restart deployment/django-app
+```
+
+### 5. Применение манифестов Kubernetes
+
+Примените манифесты развертывания и сервиса Django, которые находятся в директории `kubernetes/` вашего проекта:
+
+Перед применением убедитесь, что в `kubernetes/django-deployment.yaml` настроены переменные окружения, включая те, что берутся из секрета (`SECRET_KEY`, `DATABASE_URL`, `ALLOWED_HOSTS`). Параметр `DEBUG` должен быть установлен в `TRUE` для отладки.
+
+Примените эти манифесты:
+
+```shell
+$ kubectl apply -f kubernetes/django-deployment.yaml
+$ kubectl apply -f kubernetes/django-service.yaml
+```
+
+### 6. Выполнение миграций Django
+
+После развертывания необходимо выполнить миграции базы данных. Найдите имя вашего пода Django и выполните команду миграции:
+
+```shell
+$ kubectl get pods
+# Найдите имя пода, например, django-app-xxxxxxxxxx-xxxxx
+$ kubectl exec -it <django-pod-name> -- python manage.py migrate
+$ kubectl exec -it <django-pod-name> -- python manage.py createsuperuser # По желанию, создайте суперпользователя
+```
+
+### 7. Доступ к сайту
+
+Если сервис `NodePort` настроен, вы можете получить доступ к сайту через IP-адрес Minikube и NodePort. Получите IP-адрес Minikube:
+
+```shell
+$ minikube ip
+```
+
+Используйте его вместе с NodePort (например, 31150, как в примере `django-service.yaml`) для доступа к сайту:
+
+```
+http://<minikube-ip>:<nodeport>
+```
+
+Например, `http://192.168.59.111:31150`.

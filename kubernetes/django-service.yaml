@@ -1,0 +1,20 @@
+    # kubernetes/django-service.yaml
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: django-app
+      labels:
+        app: django-app
+        app.kubernetes.io/name: django-app
+        app.kubernetes.io/instance: django-instance
+        app.kubernetes.io/component: backend
+        app.kubernetes.io/part-of: django-project
+        app.kubernetes.io/managed-by: kubectl
+    spec:
+      selector:
+        app: django-app # Этот селектор связывает сервис с подами из django-deployment.yaml
+      type: NodePort # Изменяем на NodePort для доступа через IP узла Minikube
+      ports:
+        - protocol: TCP
+          port: 80       # Порт, который будет слушать сервис
+          targetPort: 80 # Порт, на который сервис будет перенаправлять трафик в поде
