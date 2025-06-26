@@ -2,7 +2,7 @@
     apiVersion: v1
     kind: Service
     metadata:
-      name: django-app
+      name: django-clusterip
       labels:
         app: django-app
         app.kubernetes.io/name: django-app
@@ -13,7 +13,7 @@
     spec:
       selector:
         app: django-app # Этот селектор связывает сервис с подами из django-deployment.yaml
-      type: NodePort # Изменяем на NodePort для доступа через IP узла Minikube
+      type: ClusterIP # Изменено на ClusterIP
       ports:
         - protocol: TCP
           port: 80       # Порт, который будет слушать сервис

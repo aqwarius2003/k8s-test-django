@@ -44,4 +44,4 @@
                   name: django-secret
                   key: ALLOWED_HOSTS
             - name: DEBUG
-              value: "True"
+              value: "False"
