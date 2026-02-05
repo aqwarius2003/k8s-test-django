@@ -3,9 +3,15 @@ kind: CronJob
 metadata:
   name: clearsessions-cronjob
 spec:
-  schedule: "0 2 * * *"  # Каждый день в 2:00
+  schedule: "0 2 * * *"  # Каждый день в 2:00 UTC
+  startingDeadlineSeconds: 300  # Максимальная задержка запуска - 5 минут
+  concurrencyPolicy: Forbid     # Запрещаем параллельное выполнение
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
   jobTemplate:
     spec:
+      ttlSecondsAfterFinished: 86400  # Удалить Job спустя 24 часа после завершения
+      activeDeadlineSeconds: 600  # Максимальное время выполнения - 10 минут
       template:
         spec:
           containers:
