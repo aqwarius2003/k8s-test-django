@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: django-app-pod
+  labels:
+    app: django-app
+    version: v1
+spec:
+  containers:
+  - name: django
+    image: django_app:latest
+    imagePullPolicy: Never
+    ports:
+    - containerPort: 80
+    env:
+    - name: DATABASE_URL
+      value: "postgres://test_k8s:OwOtBep9Frut@192.168.48.239:5432/test_k8s"
+    - name: SECRET_KEY
+      value: "your-production-secret-key-here"
+    - name: DEBUG
+      value: "FALSE"
+    - name: ALLOWED_HOSTS
+      value: "*"

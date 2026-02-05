@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: django-app-deployment
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: django-app
+  template:
+    metadata:
+      labels:
+        app: django-app
+    spec:
+      containers:
+      - name: django
+        image: django_app:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 80
+        env:
+        - name: DATABASE_URL
+          value: "postgres://test_k8s:OwOtBep9Frut@192.168.48.239:5432/test_k8s"
+        - name: SECRET_KEY
+          value: "your-production-secret-key-here"
+        - name: DEBUG
+          value: "FALSE"
+        - name: ALLOWED_HOSTS
+          value: "*"
