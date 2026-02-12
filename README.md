@@ -479,3 +479,73 @@ helm uninstall postgresql
 - **DEBUG** — настройка Django для включения отладочного режима. Принимает значения **TRUE** или **FALSE**. [Документация Django](https://docs.djangoproject.com/en/3.2/ref/settings/#std:setting-DEBUG).
   
 - **ALLOWED_HOSTS** — настройка
+
+
+## Подготовка dev окружения
+
+### Создание Secret с SSL-сертификатом PostgreSQL
+
+1. Скачайте SSL-сертификат Yandex Cloud:
+
+```powershell
+# Создайте папку для сертификатов
+New-Item -ItemType Directory -Path "deploy\yc-sirius-dev\edu-viktor-rykov\certs" -Force
+
+# Скачайте сертификат
+Invoke-WebRequest -Uri "https://storage.yandexcloud.net/cloud-certs/CA.pem" -OutFile "deploy\yc-sirius-dev\edu-viktor-rykov\certs\root.crt"
+```
+
+2. Создайте Secret в Kubernetes:
+
+```powershell
+kubectl create secret generic postgresql-ssl-cert `
+  --from-file=root.crt=deploy\yc-sirius-dev\edu-viktor-rykov\certs\root.crt
+```
+
+3. Проверьте создание Secret:
+
+```powershell
+kubectl get secret postgresql-ssl-cert
+```
+
+### Подключение к PostgreSQL
+
+Данные для подключения хранятся в секрете `postgres`:
+
+```powershell
+kubectl get secret postgres -o yaml
+```
+
+Пример подключения из Pod:
+
+```bash
+psql "host=<host> port=<port> sslmode=verify-full dbname=<name> user=<username>"
+```
+
+Или используйте DSN из секрета:
+
+```bash
+psql "<значение-поля-dsn>"
+```
+
+### Тестовый Pod с psql
+
+Для тестирования подключения к PostgreSQL используйте манифест `psql-test-pod-working.yaml`:
+
+```powershell
+kubectl apply -f deploy\yc-sirius-dev\edu-viktor-rykov\manifests\psql-test-pod-working.yaml
+```
+
+Подключитесь к Pod:
+
+```powershell
+kubectl exec -it psql-test -- /bin/bash
+```
+
+Установите psql:
+
+```bash
+apt-get update && apt-get install -y postgresql-client
+```
+
+Подключитесь к БД (используйте данные из секрета `postgres`).

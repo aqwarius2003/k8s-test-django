@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: psql-test
+  namespace: edu-viktor-rykov
+spec:
+  containers:
+  - name: ubuntu
+    image: ubuntu:22.04
+    command: ["/bin/sleep", "3600"]
+    volumeMounts:
+    - name: postgresql-ssl
+      mountPath: /root/.postgresql
+      readOnly: true
+  volumes:
+  - name: postgresql-ssl
+    secret:
+      secretName: postgresql-ssl-cert
+      defaultMode: 0600
+      items:
+      - key: root.crt
+        path: root.crt
