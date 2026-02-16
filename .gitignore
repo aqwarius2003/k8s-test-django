@@ -8,3 +8,6 @@ roadmap/
 
 **/manifests-raw/
 *.raw.yaml
+# SSL �����������
+**/certs/
+*.crt

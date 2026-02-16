@@ -2,6 +2,16 @@
 
 Докеризированный сайт на Django для экспериментов с Kubernetes.
 
+## Ссылки
+
+- **Работающий сайт:** [https://edu-viktor-rykov.yc-sirius-dev.pelid.team](https://edu-viktor-rykov.yc-sirius-dev.pelid.team)
+- **Админка:** [https://edu-viktor-rykov.yc-sirius-dev.pelid.team/admin/](https://edu-viktor-rykov.yc-sirius-dev.pelid.team/admin/)
+- **Docker Hub:** [aqwarius2003/django-site](https://hub.docker.com/r/aqwarius2003/django-site)
+- **Инструкции по деплою:** [deploy/yc-sirius-dev/edu-viktor-rykov/README.md](deploy/yc-sirius-dev/edu-viktor-rykov/README.md)
+- **Описание инфраструктуры:** Документ с описанием выделенных ресурсов предоставляется администратором кластера
+
+## О проекте
+
 Внутри контейнера Django приложение запускается с помощью **Nginx Unit**, не путать с **Nginx**. Сервер **Nginx Unit** выполняет сразу две функции: как веб-сервер он раздаёт файлы статики и медиа, а в роли сервера-приложений он запускает Python и Django. Таким образом, **Nginx Unit** заменяет собой связку из двух сервисов **Nginx** и **Gunicorn/uWSGI**. [Подробнее про Nginx Unit](https://unit.nginx.org/).
 
 ## Как подготовить окружение к локальной разработке
@@ -549,3 +559,261 @@ apt-get update && apt-get install -y postgresql-client
 ```
 
 Подключитесь к БД (используйте данные из секрета `postgres`).
+
+
+---
+
+## Сборка и публикация Docker образа
+
+### Быстрый способ (автоматический скрипт)
+
+```powershell
+# Windows PowerShell
+.\build-and-push.ps1
+```
+
+```bash
+# Linux/macOS
+./deploy/yc-sirius-dev/edu-viktor-rykov/scripts/build-and-push.sh <your-dockerhub-username>
+```
+
+Скрипт автоматически:
+- Получает хэш текущего коммита
+- Собирает Docker образ
+- Создает теги с хэшем коммита и `latest`
+- Загружает образы в Docker Hub
+
+### Ручной способ
+
+```powershell
+# 1. Получите хэш коммита
+$COMMIT_HASH = git rev-parse --short HEAD
+
+# 2. Соберите образ
+docker build -t django-site:$COMMIT_HASH ./backend_main_django
+
+# 3. Создайте теги (замените YOUR_USERNAME на ваш Docker Hub username)
+docker tag django-site:$COMMIT_HASH YOUR_USERNAME/django-site:$COMMIT_HASH
+docker tag django-site:$COMMIT_HASH YOUR_USERNAME/django-site:latest
+
+# 4. Авторизуйтесь в Docker Hub (если еще не авторизованы)
+docker login
+
+# 5. Загрузите образы
+docker push YOUR_USERNAME/django-site:$COMMIT_HASH
+docker push YOUR_USERNAME/django-site:latest
+```
+
+### Проверка загруженных образов
+
+После загрузки проверьте на Docker Hub:
+```
+https://hub.docker.com/r/YOUR_USERNAME/django-site
+```
+
+### Использование образа в Kubernetes
+
+```yaml
+spec:
+  containers:
+  - name: django
+    image: YOUR_USERNAME/django-site:16a37d9  # используйте конкретный хэш коммита
+    # или
+    image: YOUR_USERNAME/django-site:latest   # последняя версия
+```
+
+### Скачивание образа
+
+```bash
+# Скачать конкретную версию по хэшу коммита
+docker pull YOUR_USERNAME/django-site:16a37d9
+
+# Скачать последнюю версию
+docker pull YOUR_USERNAME/django-site:latest
+```
+
+---
+
+
+---
+
+## Деплой на production (Kubernetes)
+
+### Требования для работы приложения
+
+Приложению для работы необходимо:
+
+- **PostgreSQL** (версия 12+) с поддержкой SSL
+- **Kubernetes кластер** с настроенным Ingress контроллером
+- **Docker Registry** (Docker Hub) для хранения образов
+- **Переменные окружения** (см. ниже)
+
+### Переменные окружения
+
+Приложение настраивается через переменные окружения:
+
+**Обязательные:**
+- `SECRET_KEY` - секретный ключ Django (хранится в Secret)
+- `DATABASE_URL` - строка подключения к PostgreSQL в формате: `postgres://USER:PASSWORD@HOST:PORT/DATABASE?sslmode=verify-full`
+
+**Опциональные:**
+- `DEBUG` - режим отладки (по умолчанию `False` для production)
+- `ALLOWED_HOSTS` - разрешенные хосты (по умолчанию `*`)
+
+### Как выкатить свежую версию сайта
+
+1. Соберите и загрузите новый Docker образ:
+
+```bash
+# Автоматически (рекомендуется)
+./build-and-push.ps1
+
+# Или вручную
+git rev-parse --short HEAD  # получите хэш коммита
+docker build -t aqwarius2003/django-site:<commit-hash> ./backend_main_django
+docker push aqwarius2003/django-site:<commit-hash>
+docker tag aqwarius2003/django-site:<commit-hash> aqwarius2003/django-site:latest
+docker push aqwarius2003/django-site:latest
+```
+
+2. Обновите образ в Deployment (если используете конкретный тег):
+
+```bash
+kubectl set image deployment/django-app django=aqwarius2003/django-site:<новый-commit-hash>
+```
+
+Или просто перезапустите Deployment (если используете тег `latest`):
+
+```bash
+kubectl rollout restart deployment django-app
+```
+
+3. Примените миграции (если есть новые):
+
+```bash
+kubectl exec -it $(kubectl get pods -l app=django -o jsonpath='{.items[0].metadata.name}') -- python manage.py migrate
+```
+
+### Как проверить, что обновление завершилось
+
+```bash
+# Проверьте статус развертывания
+kubectl rollout status deployment django-app
+
+# Проверьте, что поды запущены
+kubectl get pods -l app=django
+
+# Посмотрите версию образа
+kubectl describe deployment django-app | grep Image
+
+# Проверьте логи на наличие ошибок
+kubectl logs -l app=django --tail=50
+```
+
+### Как запустить management-скрипты Django
+
+```bash
+# Получите имя пода
+POD_NAME=$(kubectl get pods -l app=django -o jsonpath='{.items[0].metadata.name}')
+
+# Выполните миграции
+kubectl exec -it $POD_NAME -- python manage.py migrate
+
+# Создайте суперпользователя
+kubectl exec -it $POD_NAME -- python manage.py createsuperuser
+
+# Соберите статику (если нужно)
+kubectl exec -it $POD_NAME -- python manage.py collectstatic --noinput
+
+# Откройте shell Django
+kubectl exec -it $POD_NAME -- python manage.py shell
+
+# Любая другая команда manage.py
+kubectl exec -it $POD_NAME -- python manage.py <команда>
+```
+
+### Где искать логи и ошибки
+
+```bash
+# Логи приложения Django
+kubectl logs -l app=django
+
+# Следить за логами в реальном времени
+kubectl logs -f -l app=django
+
+# Логи за последние N строк
+kubectl logs -l app=django --tail=100
+
+# Логи всех подов с меткой app=django
+kubectl logs -l app=django --all-containers=true
+
+# Логи Nginx (если нужно проверить проксирование)
+kubectl logs -l app=main-nginx
+
+# События в namespace (полезно для диагностики проблем с подами)
+kubectl get events --sort-by='.lastTimestamp'
+
+# Подробная информация о поде (статус, события, ошибки)
+kubectl describe pod -l app=django
+```
+
+### Полезные команды для мониторинга
+
+```bash
+# Статус всех ресурсов
+kubectl get all
+
+# Проверка работоспособности подов
+kubectl get pods -w  # watch режим
+
+# Использование ресурсов
+kubectl top pods
+kubectl top nodes
+
+# Подключиться к shell контейнера для отладки
+kubectl exec -it $(kubectl get pods -l app=django -o jsonpath='{.items[0].metadata.name}') -- /bin/bash
+
+# Проверить переменные окружения в контейнере
+kubectl exec -it $(kubectl get pods -l app=django -o jsonpath='{.items[0].metadata.name}') -- env
+
+# Проверить подключение к БД
+kubectl exec -it $(kubectl get pods -l app=django -o jsonpath='{.items[0].metadata.name}') -- python manage.py dbshell
+```
+
+### Структура манифестов для production
+
+Все манифесты для production окружения находятся в:
+```
+deploy/yc-sirius-dev/edu-viktor-rykov/manifests/
+├── django-configmap.yaml      # Переменные окружения Django
+├── django-deployment.yaml     # Deployment для Django
+├── django-service.yaml        # Service для Django
+└── main-nginx-configmap.yaml  # Конфигурация Nginx (reverse proxy)
+```
+
+### Откат на предыдущую версию
+
+Если после обновления возникли проблемы:
+
+```bash
+# Посмотрите историю развертываний
+kubectl rollout history deployment django-app
+
+# Откатитесь на предыдущую версию
+kubectl rollout undo deployment django-app
+
+# Откатитесь на конкретную ревизию
+kubectl rollout undo deployment django-app --to-revision=<номер>
+```
+
+### Масштабирование
+
+```bash
+# Увеличьте количество реплик
+kubectl scale deployment django-app --replicas=3
+
+# Проверьте статус
+kubectl get pods -l app=django
+```
+
+---

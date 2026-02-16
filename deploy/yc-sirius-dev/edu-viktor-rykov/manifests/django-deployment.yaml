@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: django-app
+  namespace: edu-viktor-rykov
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: django
+  template:
+    metadata:
+      labels:
+        app: django
+    spec:
+      containers:
+      - name: django
+        image: aqwarius2003/django-site:latest
+        ports:
+        - containerPort: 80
+        env:
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: django-secret
+              key: SECRET_KEY
+        - name: ALLOWED_HOSTS
+          valueFrom:
+            configMapKeyRef:
+              name: django-config
+              key: ALLOWED_HOSTS
+        - name: DEBUG
+          valueFrom:
+            configMapKeyRef:
+              name: django-config
+              key: DEBUG
+        - name: DATABASE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: django-config
+              key: DATABASE_URL
+        volumeMounts:
+        - name: postgresql-ssl
+          mountPath: /root/.postgresql
+          readOnly: true
+      volumes:
+      - name: postgresql-ssl
+        secret:
+          secretName: postgresql-ssl-cert
+          defaultMode: 0600
+          items:
+          - key: root.crt
+            path: root.crt

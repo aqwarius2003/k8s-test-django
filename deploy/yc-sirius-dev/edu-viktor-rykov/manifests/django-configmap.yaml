@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: django-config
+  namespace: edu-viktor-rykov
+data:
+  ALLOWED_HOSTS: "*"
+  DEBUG: "False"
+  # ВАЖНО: Замените значения ниже на реальные из секрета postgres
+  # Формат: postgres://USER:PASSWORD@HOST:PORT/DATABASE?sslmode=verify-full
+  DATABASE_URL: "postgres://edu-viktor-rykov:=O_QFs8al6QHT2uZ@c-c9qqnvghed3mn4a48p39.rw.mdb.yandexcloud.net:6432/edu-viktor-rykov?sslmode=require"
